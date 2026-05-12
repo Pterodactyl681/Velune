@@ -1,4 +1,4 @@
-export type LinkStatus = "Live" | "Mock";
+export type LinkStatus = "Live" | "Demo";
 
 export type PaymentMode = "live" | "mock";
 
