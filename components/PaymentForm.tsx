@@ -82,7 +82,7 @@ export function PaymentForm({
         </span>
         <input
           className={fieldClass}
-          placeholder="0x1234...abcd5678efgh9012ijkl3456mnop7890"
+          placeholder="0x742d35Cc6634C0532925a3b844Bc454e4438f44e"
           value={values.walletAddress}
           onChange={(event) => onChange("walletAddress", event.target.value)}
         />
@@ -90,7 +90,7 @@ export function PaymentForm({
 
       <label className="grid w-full min-w-0 gap-2 md:col-span-2">
         <span className="text-[14px] font-medium leading-none text-ink">
-          Redirect URL (optional)
+          Redirect URL
         </span>
         <input
           className={fieldClass}

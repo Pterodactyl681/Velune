@@ -5,7 +5,6 @@ import { BrandHeader } from "@/components/BrandHeader";
 import { PaymentForm } from "@/components/PaymentForm";
 import { PaymentResult } from "@/components/PaymentResult";
 import { RecentLinks } from "@/components/RecentLinks";
-import { StatusBadge } from "@/components/StatusBadge";
 import type {
   CreateLinkResponse,
   PaymentFormValues,
@@ -13,45 +12,26 @@ import type {
   RecentLink,
 } from "@/components/types";
 
-const STORAGE_KEY = "velune.recentLinks";
+const STORAGE_KEY = "velune_recent_links_v2";
+const EXAMPLE_RECEIVER = "0x742d35Cc6634C0532925a3b844Bc454e4438f44e";
 
 const initialFormValues: PaymentFormValues = {
   description: "",
-  amount: "100.00",
+  amount: "12.00",
   currency: "USDC",
   walletAddress: "",
   redirectUrl: "",
 };
 
-const seedLinks: RecentLink[] = [
-  {
-    id: "seed-website-development",
-    description: "Website development",
-    amount: "250.00",
-    currency: "USDC",
-    status: "Live",
-    url: "https://pay.velune.app/checkout/website-development",
-    createdAt: 3,
-  },
-  {
-    id: "seed-branding-consultation",
-    description: "Branding consultation",
-    amount: "150.00",
-    currency: "USDC",
-    status: "Mock",
-    url: "https://pay.velune.app/checkout/branding-consultation",
-    createdAt: 2,
-  },
-  {
-    id: "seed-ui-ux-design",
-    description: "UI/UX design",
-    amount: "300.00",
-    currency: "USDC",
-    status: "Live",
-    url: "https://pay.velune.app/checkout/ui-ux-design",
-    createdAt: 1,
-  },
-];
+type GeneratedLink = {
+  url: string;
+  mode: PaymentMode;
+};
+
+type Feedback = {
+  tone: "success" | "error";
+  text: string;
+};
 
 function createLocalId() {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
@@ -72,40 +52,54 @@ function statusFromMode(mode: PaymentMode) {
 
 export function PaymentLinkGenerator() {
   const [values, setValues] = useState<PaymentFormValues>(initialFormValues);
-  const [generatedUrl, setGeneratedUrl] = useState(
-    "https://pay.velune.app/checkout/3f9a7b1c-8e2d-4a11-9f7c-2b0d9e6f8a1c",
+  const [generatedLink, setGeneratedLink] = useState<GeneratedLink | null>(
+    null,
   );
-  const [generatedMode, setGeneratedMode] = useState<PaymentMode>("mock");
-  const [recentLinks, setRecentLinks] = useState<RecentLink[]>(seedLinks);
+  const [recentLinks, setRecentLinks] = useState<RecentLink[]>([]);
+  const [hasLoadedRecentLinks, setHasLoadedRecentLinks] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [feedback, setFeedback] = useState("");
+  const [feedback, setFeedback] = useState<Feedback | null>(null);
+
+  useEffect(() => {
+    setValues((current) => ({
+      ...current,
+      redirectUrl: current.redirectUrl || `${window.location.origin}/success`,
+    }));
+  }, []);
 
   useEffect(() => {
     const saved = window.localStorage.getItem(STORAGE_KEY);
     if (!saved) {
+      setHasLoadedRecentLinks(true);
       return;
     }
 
     try {
       const parsed = JSON.parse(saved) as RecentLink[];
-      if (Array.isArray(parsed) && parsed.length > 0) {
+      if (Array.isArray(parsed)) {
         setRecentLinks(parsed.slice(0, 5));
       }
     } catch {
       window.localStorage.removeItem(STORAGE_KEY);
+    } finally {
+      setHasLoadedRecentLinks(true);
     }
   }, []);
 
   useEffect(() => {
+    if (!hasLoadedRecentLinks) {
+      return;
+    }
+
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(recentLinks));
-  }, [recentLinks]);
+  }, [hasLoadedRecentLinks, recentLinks]);
 
   useEffect(() => {
     if (!feedback) {
       return;
     }
 
-    const timeout = window.setTimeout(() => setFeedback(""), 2400);
+    const timeout = window.setTimeout(() => setFeedback(null), 2400);
     return () => window.clearTimeout(timeout);
   }, [feedback]);
 
@@ -113,6 +107,7 @@ export function PaymentLinkGenerator() {
     return (
       values.description.trim().length > 0 &&
       values.amount.trim().length > 0 &&
+      values.redirectUrl.trim().length > 0 &&
       values.walletAddress.trim().length > 0
     );
   }, [values]);
@@ -151,19 +146,15 @@ export function PaymentLinkGenerator() {
         fallbackCopy(url);
       }
 
-      setFeedback("Link copied");
+      setFeedback({ tone: "success", text: "Copied" });
     } catch {
       try {
         fallbackCopy(url);
-        setFeedback("Link copied");
+        setFeedback({ tone: "success", text: "Copied" });
       } catch {
-        setFeedback("Copy failed");
+        setFeedback({ tone: "error", text: "Copy failed" });
       }
     }
-  }
-
-  function openUrl(url: string) {
-    window.open(url, "_blank", "noopener,noreferrer");
   }
 
   function tryExample() {
@@ -173,30 +164,37 @@ export function PaymentLinkGenerator() {
       description: "AI research task",
       amount: "12.00",
       currency: "USDC",
-      walletAddress: "0x742d35Cc6634C0532925a3b844Bc454e4438f44e",
+      walletAddress: EXAMPLE_RECEIVER,
       redirectUrl: `${origin}/success`,
     });
-    setFeedback("Example filled");
+    setFeedback({ tone: "success", text: "Example filled" });
+  }
+
+  function clearHistory() {
+    setRecentLinks([]);
+    setFeedback({ tone: "success", text: "History cleared" });
   }
 
   async function generateLink() {
     if (!canGenerate) {
-      setFeedback("Add description, amount, and wallet");
+      setFeedback({
+        tone: "error",
+        text: "Add description, amount, wallet, and redirect URL",
+      });
       return;
     }
 
     const price = parseAmount(values.amount);
     if (!Number.isFinite(price) || price <= 0) {
-      setFeedback("Amount must be a positive number");
+      setFeedback({ tone: "error", text: "Amount must be a positive number" });
       return;
     }
 
     setIsGenerating(true);
-    setFeedback("");
+    setFeedback(null);
 
     try {
-      const redirectUrl =
-        values.redirectUrl.trim() || `${window.location.origin}/success`;
+      const redirectUrl = values.redirectUrl.trim();
 
       const response = await fetch("/api/kirapay/create-link", {
         method: "POST",
@@ -212,10 +210,13 @@ export function PaymentLinkGenerator() {
         }),
       });
 
-      const payload = (await response.json()) as CreateLinkResponse;
+      const payload = (await response.json().catch(() => ({
+        ok: false,
+        error: "Payment link service returned an invalid response",
+      }))) as CreateLinkResponse;
 
       if (!payload.ok) {
-        setFeedback(payload.error);
+        setFeedback({ tone: "error", text: payload.error });
         return;
       }
 
@@ -230,19 +231,25 @@ export function PaymentLinkGenerator() {
         createdAt: Date.now(),
       };
 
-      setGeneratedUrl(payload.url);
-      setGeneratedMode(payload.mode);
+      setGeneratedLink({ url: payload.url, mode: payload.mode });
       setValues((current) => ({
         ...current,
         amount,
         redirectUrl: payload.request.redirectUrl,
       }));
-      setRecentLinks((current) => [link, ...current].slice(0, 5));
+      setRecentLinks((current) =>
+        [link, ...current.filter((item) => item.url !== link.url)].slice(0, 5),
+      );
       setFeedback(
-        payload.mode === "live" ? "Live payment link ready" : "Mock link ready",
+        payload.mode === "live"
+          ? { tone: "success", text: "Live payment link ready" }
+          : { tone: "success", text: "Mock link ready" },
       );
     } catch {
-      setFeedback("Could not create the payment link");
+      setFeedback({
+        tone: "error",
+        text: "Could not create the payment link",
+      });
     } finally {
       setIsGenerating(false);
     }
@@ -254,10 +261,6 @@ export function PaymentLinkGenerator() {
         <BrandHeader />
 
         <section className="mt-7 w-full min-w-0 max-w-full overflow-hidden rounded-[20px] border border-line bg-white px-5 py-6 shadow-card sm:px-8 sm:py-8 lg:px-10 lg:py-10">
-          <div className="mb-6 flex min-h-7 items-center justify-end">
-            <StatusBadge label="Live" dot />
-          </div>
-
           <div className="grid w-full min-w-0 gap-8">
             <PaymentForm
               values={values}
@@ -268,25 +271,29 @@ export function PaymentLinkGenerator() {
             />
 
             <PaymentResult
-              url={generatedUrl}
-              mode={generatedMode}
-              onCopy={() => copyUrl(generatedUrl)}
-              onOpen={() => openUrl(generatedUrl)}
+              link={generatedLink}
+              onCopy={() => {
+                if (generatedLink) {
+                  copyUrl(generatedLink.url);
+                }
+              }}
             />
 
             <RecentLinks
               links={recentLinks}
               onCopy={copyUrl}
-              onOpen={openUrl}
+              onClear={clearHistory}
             />
           </div>
         </section>
 
         <div
           aria-live="polite"
-          className="mx-auto mt-4 min-h-6 text-center text-[14px] text-[#5f5f5f]"
+          className={`mx-auto mt-4 min-h-6 text-center text-[14px] ${
+            feedback?.tone === "error" ? "text-[#a34531]" : "text-[#5f5f5f]"
+          }`}
         >
-          {feedback}
+          {feedback?.text}
         </div>
 
         <footer className="pb-7 pt-2 text-center text-[12px] text-[#9a948b]">

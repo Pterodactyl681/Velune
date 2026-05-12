@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
-const KIRAPAY_BASE_URL = "https://kirapay-api.holatech.app/api";
+const KIRAPAY_GENERATE_URL =
+  "https://kirapay-api.holatech.app/api/link/generate";
 
 type CreateLinkRequest = {
   name?: unknown;
@@ -19,9 +20,10 @@ type NormalizedRequest = {
 };
 
 type KiraPayResponse = {
-  message?: string;
+  message?: unknown;
+  error?: unknown;
   data?: {
-    url?: string;
+    url?: unknown;
   };
 };
 
@@ -36,6 +38,41 @@ function isValidUrl(value: string) {
   } catch {
     return false;
   }
+}
+
+function cleanMessage(value: string) {
+  return value.replace(/\s+/g, " ").trim().slice(0, 300);
+}
+
+function parseKiraPayPayload(responseText: string): KiraPayResponse | null {
+  if (!responseText.trim()) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(responseText) as KiraPayResponse;
+  } catch {
+    return null;
+  }
+}
+
+function getResponseMessage(payload: KiraPayResponse | null) {
+  if (typeof payload?.message === "string" && payload.message.trim()) {
+    return cleanMessage(payload.message);
+  }
+
+  if (typeof payload?.error === "string" && payload.error.trim()) {
+    return cleanMessage(payload.error);
+  }
+
+  return "";
+}
+
+function kiraPayError(status: number, message: string) {
+  return errorResponse(
+    `KiraPay API request failed: ${status} ${message}`,
+    status,
+  );
 }
 
 function normalizeRequest(body: CreateLinkRequest): NormalizedRequest | string {
@@ -120,7 +157,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const response = await fetch(`${KIRAPAY_BASE_URL}/link/generate`, {
+    const response = await fetch(KIRAPAY_GENERATE_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -130,29 +167,38 @@ export async function POST(request: Request) {
       cache: "no-store",
     });
 
-    const payload = (await response.json().catch(() => null)) as
-      | KiraPayResponse
-      | null;
+    const responseText = await response.text();
+    const payload = parseKiraPayPayload(responseText);
 
     if (!response.ok) {
-      return errorResponse(
-        payload?.message || "KiraPay could not create the payment link.",
+      return kiraPayError(
         response.status,
+        getResponseMessage(payload) ||
+          cleanMessage(responseText) ||
+          response.statusText ||
+          "KiraPay could not create the payment link.",
       );
     }
 
     const url = payload?.data?.url;
-    if (!url) {
-      return errorResponse("KiraPay response did not include a payment URL.", 502);
+    if (typeof url !== "string" || !url.trim()) {
+      return kiraPayError(
+        502,
+        "KiraPay response did not include a payment URL.",
+      );
     }
 
     return NextResponse.json({
       ok: true,
-      url,
+      url: url.trim(),
       mode: "live",
       request: normalized,
     });
-  } catch {
-    return errorResponse("Unable to reach KiraPay. Please try again.", 502);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Network error";
+    return errorResponse(
+      `KiraPay API request failed: network error ${message}`,
+      502,
+    );
   }
 }
