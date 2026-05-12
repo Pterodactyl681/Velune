@@ -1,6 +1,6 @@
 
 
-````md
+
 # Velune
 
 **Create clean payment links.**
@@ -61,7 +61,7 @@ Velune does not stop at generating a link.
 
 After a payment link is created, Velune also generates a ready-to-use HTML button:
 
-```html
+html
 <a
   href="PAYMENT_LINK"
   target="_blank"
@@ -70,7 +70,7 @@ After a payment link is created, Velune also generates a ready-to-use HTML butto
 >
   Pay 12 USDC
 </a>
-````
+
 
 This makes Velune useful for builders who want to add payment collection to a landing page, portfolio, agent interface, or small product without building a payment UI from scratch.
 
@@ -151,7 +151,7 @@ This keeps the interface usable even during external API downtime.
 
 ## Project structure
 
-```txt
+txt
 app/
   api/
     kirapay/
@@ -171,7 +171,6 @@ components/
 
 lib/
   utils.ts
-```
 
 ---
 
@@ -179,24 +178,23 @@ lib/
 
 Create a `.env.local` file:
 
-```env
+env
 KIRAPAY_API_KEY=your_kirapay_api_key
 NEXT_PUBLIC_APP_URL=http://localhost:3000
-```
+
 
 For production, set these variables in your deployment provider:
 
-```env
+env
 KIRAPAY_API_KEY=your_kirapay_api_key
 NEXT_PUBLIC_APP_URL=https://your-domain.vercel.app
-```
 
 Important:
 
-```txt
+txt
 Never commit .env.local.
 Never expose KIRAPAY_API_KEY in frontend code.
-```
+
 
 ---
 
@@ -204,9 +202,9 @@ Never expose KIRAPAY_API_KEY in frontend code.
 
 Install dependencies:
 
-```bash
+bash
 npm install
-```
+
 
 Run the development server:
 
@@ -216,15 +214,15 @@ npm run dev
 
 Open:
 
-```txt
+`txt
 http://localhost:3000
-```
+
 
 Build for production:
 
-```bash
+bash
 npm run build
-```
+
 
 ---
 
@@ -234,10 +232,9 @@ Velune is ready to deploy on Vercel.
 
 Required environment variables:
 
-```env
+env
 KIRAPAY_API_KEY=
 NEXT_PUBLIC_APP_URL=
-```
 
 After changing environment variables in Vercel, redeploy the project so the new values are applied.
 
