@@ -304,7 +304,7 @@ export function PaymentLinkGenerator() {
         </div>
 
         <footer className="pb-7 pt-2 text-center text-[12px] text-[#9a948b]">
-          Built for Build with KIRAPAY on Superteam Earn
+          Powered by KIRAPAY
         </footer>
       </div>
     </main>
