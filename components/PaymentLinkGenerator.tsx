@@ -26,6 +26,8 @@ const initialFormValues: PaymentFormValues = {
 type GeneratedLink = {
   url: string;
   mode: PaymentMode;
+  amount: string;
+  currency: string;
 };
 
 type Feedback = {
@@ -47,7 +49,7 @@ function parseAmount(value: string) {
 }
 
 function statusFromMode(mode: PaymentMode) {
-  return mode === "live" ? "Live" : "Mock";
+  return mode === "live" ? "Live" : "Demo";
 }
 
 export function PaymentLinkGenerator() {
@@ -231,7 +233,12 @@ export function PaymentLinkGenerator() {
         createdAt: Date.now(),
       };
 
-      setGeneratedLink({ url: payload.url, mode: payload.mode });
+      setGeneratedLink({
+  url: payload.url,
+  mode: payload.mode,
+  amount,
+  currency: payload.request.currency,
+});
       setValues((current) => ({
         ...current,
         amount,
@@ -243,7 +250,7 @@ export function PaymentLinkGenerator() {
       setFeedback(
         payload.mode === "live"
           ? { tone: "success", text: "Live payment link ready" }
-          : { tone: "success", text: "Mock link ready" },
+          : { tone: "success", text: "Demo fallback ready" },
       );
     } catch {
       setFeedback({
