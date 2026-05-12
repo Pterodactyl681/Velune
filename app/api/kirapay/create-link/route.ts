@@ -1,204 +1,165 @@
 import { NextResponse } from "next/server";
 
-const KIRAPAY_GENERATE_URL =
-  "https://kirapay-api.holatech.app/api/link/generate";
-
 type CreateLinkRequest = {
-  name?: unknown;
-  price?: unknown;
-  currency?: unknown;
-  receiver?: unknown;
-  redirectUrl?: unknown;
+  name?: string;
+  price?: number;
+  currency?: string;
+  receiver?: string;
+  redirectUrl?: string;
 };
 
-type NormalizedRequest = {
-  name: string;
-  price: number;
-  currency: "USDC";
-  receiver: string;
-  redirectUrl: string;
-};
-
-type KiraPayResponse = {
-  message?: unknown;
-  error?: unknown;
-  data?: {
-    url?: unknown;
-  };
-};
-
-function errorResponse(message: string, status = 400) {
-  return NextResponse.json({ ok: false, error: message }, { status });
+function makeMockUrl() {
+  const id = Math.random().toString(36).slice(2, 10);
+  return `https://velune-mocha.vercel.app/success?demo=${id}`;
 }
 
-function isValidUrl(value: string) {
+function cleanErrorText(text: string) {
+  if (!text) return "Unknown error";
+
+  // Если KiraPay вернул HTML/Cloudflare — не показываем простыню пользователю
+  if (text.includes("<!DOCTYPE html") || text.includes("<html")) {
+    return "KiraPay API is temporarily unavailable.";
+  }
+
   try {
-    const url = new URL(value);
-    return url.protocol === "http:" || url.protocol === "https:";
+    const parsed = JSON.parse(text);
+    return parsed?.message || parsed?.error || text;
   } catch {
-    return false;
+    return text.slice(0, 180);
   }
 }
 
-function cleanMessage(value: string) {
-  return value.replace(/\s+/g, " ").trim().slice(0, 300);
-}
-
-function parseKiraPayPayload(responseText: string): KiraPayResponse | null {
-  if (!responseText.trim()) {
-    return null;
-  }
-
+export async function POST(req: Request) {
   try {
-    return JSON.parse(responseText) as KiraPayResponse;
-  } catch {
-    return null;
-  }
-}
+    const body = (await req.json()) as CreateLinkRequest;
 
-function getResponseMessage(payload: KiraPayResponse | null) {
-  if (typeof payload?.message === "string" && payload.message.trim()) {
-    return cleanMessage(payload.message);
-  }
+    const name = body.name?.trim();
+    const price = Number(body.price);
+    const currency = body.currency?.trim() || "USDC";
+    const receiver = body.receiver?.trim();
+    const redirectUrl = body.redirectUrl?.trim();
 
-  if (typeof payload?.error === "string" && payload.error.trim()) {
-    return cleanMessage(payload.error);
-  }
+    if (!name) {
+      return NextResponse.json({ ok: false, error: "Payment description is required." }, { status: 400 });
+    }
 
-  return "";
-}
+    if (!price || Number.isNaN(price) || price <= 0) {
+      return NextResponse.json({ ok: false, error: "Amount must be a positive number." }, { status: 400 });
+    }
 
-function kiraPayError(status: number, message: string) {
-  return errorResponse(
-    `KiraPay API request failed: ${status} ${message}`,
-    status,
-  );
-}
+    if (!currency) {
+      return NextResponse.json({ ok: false, error: "Currency is required." }, { status: 400 });
+    }
 
-function normalizeRequest(body: CreateLinkRequest): NormalizedRequest | string {
-  const name = typeof body.name === "string" ? body.name.trim() : "";
-  if (!name) {
-    return "Payment description is required.";
-  }
+    if (!receiver) {
+      return NextResponse.json({ ok: false, error: "Receiver wallet address is required." }, { status: 400 });
+    }
 
-  const price =
-    typeof body.price === "number"
-      ? body.price
-      : typeof body.price === "string"
-        ? Number.parseFloat(body.price)
-        : Number.NaN;
+    if (!redirectUrl) {
+      return NextResponse.json({ ok: false, error: "Redirect URL is required." }, { status: 400 });
+    }
 
-  if (!Number.isFinite(price) || price <= 0) {
-    return "Amount must be a positive number.";
-  }
+    try {
+      new URL(redirectUrl);
+    } catch {
+      return NextResponse.json({ ok: false, error: "Redirect URL must be valid." }, { status: 400 });
+    }
 
-  const currency = typeof body.currency === "string" ? body.currency.trim() : "";
-  if (!currency) {
-    return "Currency is required.";
-  }
+    const apiKey = process.env.KIRAPAY_API_KEY;
 
-  if (currency !== "USDC") {
-    return "Currency must be USDC.";
-  }
+    const requestPayload = {
+      price,
+      currency,
+      receiver,
+      name,
+      redirectUrl,
+    };
 
-  const receiver =
-    typeof body.receiver === "string" ? body.receiver.trim() : "";
-  if (!receiver) {
-    return "Receiver wallet address is required.";
-  }
+    // Если ключа нет — честный mock mode
+    if (!apiKey) {
+      return NextResponse.json({
+        ok: true,
+        url: makeMockUrl(),
+        mode: "mock",
+        warning: "KIRAPAY_API_KEY is missing. Using demo mode.",
+        request: requestPayload,
+      });
+    }
 
-  const redirectUrl =
-    typeof body.redirectUrl === "string" ? body.redirectUrl.trim() : "";
-  if (!redirectUrl || !isValidUrl(redirectUrl)) {
-    return "Redirect URL must be a valid URL.";
-  }
-
-  return {
-    name,
-    price,
-    currency,
-    receiver,
-    redirectUrl,
-  };
-}
-
-function createDemoUrl() {
-  const randomId =
-    typeof crypto !== "undefined" && "randomUUID" in crypto
-      ? crypto.randomUUID().slice(0, 13)
-      : Math.random().toString(36).slice(2, 15);
-
-  return `https://pay.velune.app/checkout/demo-${randomId}`;
-}
-
-export async function POST(request: Request) {
-  let body: CreateLinkRequest;
-
-  try {
-    body = (await request.json()) as CreateLinkRequest;
-  } catch {
-    return errorResponse("Request body must be valid JSON.");
-  }
-
-  const normalized = normalizeRequest(body);
-  if (typeof normalized === "string") {
-    return errorResponse(normalized);
-  }
-
-  const apiKey = process.env.KIRAPAY_API_KEY;
-
-  if (!apiKey) {
-    return NextResponse.json({
-      ok: true,
-      url: createDemoUrl(),
-      mode: "mock",
-      request: normalized,
-    });
-  }
-
-  try {
-    const response = await fetch(KIRAPAY_GENERATE_URL, {
+    const response = await fetch("https://kirapay-api.holatech.app/api/link/generate", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "x-api-key": apiKey,
       },
-      body: JSON.stringify(normalized),
+      body: JSON.stringify(requestPayload),
       cache: "no-store",
     });
 
     const responseText = await response.text();
-    const payload = parseKiraPayPayload(responseText);
 
     if (!response.ok) {
-      return kiraPayError(
-        response.status,
-        getResponseMessage(payload) ||
-          cleanMessage(responseText) ||
-          response.statusText ||
-          "KiraPay could not create the payment link.",
+      const cleanMessage = cleanErrorText(responseText);
+
+      // Внешний KiraPay API временно лежит — не ломаем демку, но честно ставим mock
+      if ([521, 502, 503, 504].includes(response.status)) {
+        return NextResponse.json({
+          ok: true,
+          url: makeMockUrl(),
+          mode: "mock",
+          warning: `KiraPay API unavailable (${response.status}). Demo fallback used.`,
+          request: requestPayload,
+        });
+      }
+
+      return NextResponse.json(
+        {
+          ok: false,
+          error: `KiraPay API request failed: ${response.status} ${cleanMessage}`,
+        },
+        { status: response.status }
       );
     }
 
-    const url = payload?.data?.url;
-    if (typeof url !== "string" || !url.trim()) {
-      return kiraPayError(
-        502,
-        "KiraPay response did not include a payment URL.",
+    let data: any;
+
+    try {
+      data = JSON.parse(responseText);
+    } catch {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "KiraPay API returned an invalid response.",
+        },
+        { status: 502 }
+      );
+    }
+
+    const url = data?.data?.url;
+
+    if (!url) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "KiraPay API did not return a payment link.",
+        },
+        { status: 502 }
       );
     }
 
     return NextResponse.json({
       ok: true,
-      url: url.trim(),
+      url,
       mode: "live",
-      request: normalized,
+      request: requestPayload,
     });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Network error";
-    return errorResponse(
-      `KiraPay API request failed: network error ${message}`,
-      502,
+  } catch {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "Unexpected server error while creating payment link.",
+      },
+      { status: 500 }
     );
   }
 }
