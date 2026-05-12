@@ -101,7 +101,7 @@ export function PaymentResult({ link, onCopy }: PaymentResultProps) {
         <button
           type="button"
           aria-label="Copy generated payment link"
-          className="mr-2 flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] text-[#3e3b36] transition hover:bg-[#f4f1ec] focus:outline-none focus:ring-2 focus:ring-line"
+          className="mr-2 flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] text-[#3e3b36] transition hover:bg-[#f4f1ec] focus:outline-none focus:ring-2 focus:ring-line disabled:pointer-events-none disabled:opacity-50"
           onClick={onCopy}
           disabled={!link}
         >
@@ -121,7 +121,7 @@ export function PaymentResult({ link, onCopy }: PaymentResultProps) {
         </button>
 
         <a
-          href={link?.url}
+          href={link?.url || "#"}
           target="_blank"
           rel="noopener noreferrer"
           aria-disabled={!link}
@@ -163,9 +163,6 @@ export function PaymentResult({ link, onCopy }: PaymentResultProps) {
           </pre>
         </div>
       ) : null}
-    </section>
-  );
-}
     </section>
   );
 }
